@@ -103,8 +103,8 @@ class VAPAAD:
         # Define loss functions and optimizers
         self.cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
         self.learning_rate = tf.Variable(1e-4, trainable=False)
-        self.generator_optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
-        self.instructor_optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+        self.generator_optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
+        self.instructor_optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
 
     def build_generator(self) -> keras.Model:
         """
@@ -218,9 +218,15 @@ class VAPAAD:
         # Check if the current loss has increased compared to the previous loss
         if current_loss > previous_loss:
             # Calculate the new learning rate by reducing the current learning rate by 10%
-            new_lr = self.learning_rate * decay_rate
+            current_lr = self.learning_rate.numpy()
+            new_lr = current_lr * decay_rate
             # Update the learning rate with the higher value between the new learning rate and the minimum threshold
-            self.learning_rate.assign(max(new_lr, 1e-6))
+            new_lr = max(new_lr, 1e-6)
+            self.learning_rate.assign(new_lr)
+            
+            # Update the optimizers' learning rates
+            self.generator_optimizer.learning_rate.assign(new_lr)
+            self.instructor_optimizer.learning_rate.assign(new_lr)
 
     def train_step(
         self, images: tf.Tensor, future_images: tf.Tensor
