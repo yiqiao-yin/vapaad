@@ -11,7 +11,7 @@ VAPAAD is a sophisticated neural network architecture designed for video process
 ```bash
 # 1. Initialize project and add dependencies
 uv init my_vapaad_proj && cd my_vapaad_proj
-uv add numpy tensorflow keras matplotlib imageio ipython jupyter ipywidgets
+uv add numpy tensorflow keras matplotlib imageio pillow ipython jupyter ipywidgets
 
 # 2. Clone and run VAPAAD
 git clone https://github.com/yiqiao-yin/vapaad.git
@@ -64,7 +64,7 @@ cd my_vapaad_proj
 
 ```bash
 # Add all dependencies in one command
-uv add numpy tensorflow keras matplotlib imageio ipython jupyter ipywidgets
+uv add numpy tensorflow keras matplotlib imageio pillow ipython jupyter ipywidgets
 ```
 
 ### Step 3: Clone and setup VAPAAD
