@@ -63,6 +63,38 @@ from src.plot_images import plot_image_sequences, rescale_and_discretize
 from src.vapaad import VAPAAD
 
 
+def sequence_ce_sum(y_true, y_pred):
+    """Paper-style summed cross-entropy per sequence."""
+    # Always cast to float32 to avoid mixed precision issues
+    y_true = tf.cast(y_true, tf.float32)
+    y_pred = tf.cast(y_pred, tf.float32)
+    
+    bce = tf.keras.losses.binary_crossentropy(y_true, y_pred)
+    # Get the actual number of dimensions to handle both 4D and 5D cases
+    ndims = len(bce.shape)
+    if ndims == 4:  # (batch, time, height, width)
+        ce_sum_per_seq = tf.reduce_sum(bce, axis=[1, 2, 3])
+    else:  # (batch, time, height, width, channels)
+        ce_sum_per_seq = tf.reduce_sum(bce, axis=[1, 2, 3, 4])
+    return tf.reduce_mean(ce_sum_per_seq)
+
+
+def mse_seq(y_true, y_pred):
+    """MSE per sequence."""
+    # Always cast to float32 to avoid mixed precision issues
+    y_true = tf.cast(y_true, tf.float32)
+    y_pred = tf.cast(y_pred, tf.float32)
+    
+    se = tf.square(y_pred - y_true)
+    # Get the actual number of dimensions
+    ndims = len(se.shape)
+    if ndims == 4:  # (batch, time, height, width)
+        mse_per_seq = tf.reduce_mean(se, axis=[1, 2, 3])
+    else:  # (batch, time, height, width, channels)
+        mse_per_seq = tf.reduce_mean(se, axis=[1, 2, 3, 4])
+    return tf.reduce_mean(mse_per_seq)
+
+
 class VAPAADTester:
     """
     A comprehensive tester class for the VAPAAD model that handles data loading,
@@ -345,21 +377,36 @@ class VAPAADTester:
         
         evaluation_time = time.time() - start_time
         
-        # Calculate some basic metrics
+        # Calculate basic metrics
         mse = np.mean((self.y_val - y_val_pred) ** 2)
         mae = np.mean(np.abs(self.y_val - y_val_pred))
+        
+        # Calculate custom loss functions
+        print("📊 Computing custom loss metrics...")
+        with tf.device(device_context):
+            custom_ce_sum = sequence_ce_sum(self.y_val, y_val_pred).numpy()
+            custom_mse_seq = mse_seq(self.y_val, y_val_pred).numpy()
+        
+        print(f"📈 Custom Metrics:")
+        print(f"   • Sequence CE Sum: {custom_ce_sum:.6f}")
+        print(f"   • MSE Sequence: {custom_mse_seq:.6f}")
+        print(f"   • Standard MSE: {mse:.6f}")
+        print(f"   • Standard MAE: {mae:.6f}")
         
         self.results['evaluation'] = {
             'true_shape': list(self.y_val.shape),
             'predicted_shape': list(y_val_pred.shape),
             'evaluation_time': evaluation_time,
             'mse': float(mse),
-            'mae': float(mae)
+            'mae': float(mae),
+            'custom_metrics': {
+                'sequence_ce_sum': float(custom_ce_sum),
+                'mse_seq': float(custom_mse_seq)
+            }
         }
         
         print(f"Shape of true y_val: {self.y_val.shape}")
         print(f"Shape of predicted y_val: {y_val_pred.shape}")
-        print(f"MSE: {mse:.6f}, MAE: {mae:.6f}")
         print(f"Evaluation completed in {evaluation_time:.2f} seconds")
         
         # Store predictions for visualization
