@@ -33,6 +33,10 @@ except ImportError:
 # Use non-interactive backend for matplotlib in testing environments
 matplotlib.use('Agg')
 
+# Configure TensorFlow for CPU-only execution to avoid GPU compatibility issues
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Force CPU-only execution
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'   # Reduce TF logging
+
 # Add parent directory to path to import from src
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -225,14 +229,25 @@ class VAPAADTester:
         
         print(f"Training subset shape: {x_train_sub.shape}, {y_train_sub.shape}")
         
-        # Train model with GPU support if available
-        if tf.test.gpu_device_name() != '':
-            print(f"Training on GPU: {tf.test.gpu_device_name()}")
-            with tf.device('/device:GPU:0'):
+        # Train model with GPU support if available, fallback to CPU on errors
+        gpu_used = False
+        try:
+            if tf.test.gpu_device_name() != '':
+                print(f"Attempting training on GPU: {tf.test.gpu_device_name()}")
+                # Force CPU execution to avoid cuDNN issues
+                with tf.device('/device:CPU:0'):
+                    print("Note: Using CPU execution to avoid GPU compatibility issues")
+                    self.model.train(x_train_sub, y_train_sub, batch_size=batch_size)
+                gpu_used = False  # Actually using CPU due to compatibility
+            else:
+                print("Training on CPU")
                 self.model.train(x_train_sub, y_train_sub, batch_size=batch_size)
-        else:
-            print("Training on CPU")
-            self.model.train(x_train_sub, y_train_sub, batch_size=batch_size)
+        except Exception as gpu_error:
+            print(f"GPU training failed: {gpu_error}")
+            print("Falling back to CPU training...")
+            with tf.device('/device:CPU:0'):
+                self.model.train(x_train_sub, y_train_sub, batch_size=batch_size)
+            gpu_used = False
         
         training_time = time.time() - start_time
         
@@ -240,7 +255,8 @@ class VAPAADTester:
             'num_samples': num_samples,
             'batch_size': batch_size,
             'training_time': training_time,
-            'gpu_used': tf.test.gpu_device_name() != '',
+            'gpu_used': gpu_used,
+            'gpu_available': tf.test.gpu_device_name() != '',
             'selected_indices': indices[:6].tolist()
         }
         
@@ -256,11 +272,9 @@ class VAPAADTester:
         # Get trained generator
         trained_generator = self.model.gen_main
         
-        # Make predictions on validation set
-        if tf.test.gpu_device_name() != '':
-            with tf.device('/device:GPU:0'):
-                y_val_pred = trained_generator.predict(self.x_val)
-        else:
+        # Make predictions on validation set (force CPU to avoid compatibility issues)
+        with tf.device('/device:CPU:0'):
+            print("Running predictions on CPU to avoid GPU compatibility issues")
             y_val_pred = trained_generator.predict(self.x_val)
         
         evaluation_time = time.time() - start_time
