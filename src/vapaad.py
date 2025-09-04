@@ -315,11 +315,11 @@ class VAPAAD:
         fake_loss = self.cross_entropy(tf.ones_like(fake_output), fake_output)
         return real_loss + fake_loss
 
-    def train(self, x_train, y_train, batch_size=64):
+    def train(self, x_train, y_train, batch_size=64, epochs=1):
         """
-        Trains the model for a specified batch size.
+        Trains the model for a specified number of epochs and batch size.
 
-        This function iterates over the entire dataset for a epoch,
+        This function iterates over the entire dataset for the specified number of epochs,
         randomly selecting batches of data to perform training steps. The selection is random
         and without replacement within each epoch, ensuring diverse exposure of data.
 
@@ -327,6 +327,7 @@ class VAPAAD:
         x_train (np.ndarray): The input training data.
         y_train (np.ndarray): The target training data.
         batch_size (int, optional): The number of samples per batch of computation. Defaults to 64.
+        epochs (int, optional): The number of epochs to train. Defaults to 1.
 
         Returns:
         None
@@ -334,28 +335,46 @@ class VAPAAD:
         previous_loss = float('inf')
         n_samples = x_train.shape[0]
         start = time.time()
-        indices = np.arange(n_samples)
-        np.random.shuffle(indices)
-        for i in range(0, n_samples, batch_size):
-            if i + batch_size > n_samples:
-                continue  # Avoid index error on the last batch if it's smaller than the batch size
-            selected_indices = indices[i : i + batch_size]
-            x_batch = x_train[selected_indices]
-            y_batch = y_train[selected_indices]
-            curr_gen_loss, curr_inst_loss = self.train_step(x_batch, y_batch)
-            # if curr_gen_loss < 0.2:  # Early stopping condition
-            #     print(
-            #         f"> running: current sample {i + 1}, gen_loss={curr_gen_loss}, inst_loss={curr_inst_loss}, time={time.time() - start} sec"
-            #     )
-            #     return
+        
+        for epoch in range(epochs):
+            print(f"Epoch {epoch + 1}/{epochs}")
+            indices = np.arange(n_samples)
+            np.random.shuffle(indices)
+            epoch_gen_loss = 0.0
+            epoch_inst_loss = 0.0
+            n_batches = 0
+            
+            for i in range(0, n_samples, batch_size):
+                if i + batch_size > n_samples:
+                    continue  # Avoid index error on the last batch if it's smaller than the batch size
+                selected_indices = indices[i : i + batch_size]
+                x_batch = x_train[selected_indices]
+                y_batch = y_train[selected_indices]
+                curr_gen_loss, curr_inst_loss = self.train_step(x_batch, y_batch)
+                
+                # Accumulate losses for epoch summary
+                epoch_gen_loss += float(curr_gen_loss)
+                epoch_inst_loss += float(curr_inst_loss)
+                n_batches += 1
+                
+                # if curr_gen_loss < 0.2:  # Early stopping condition
+                #     print(
+                #         f"> running: current sample {i + 1}, gen_loss={curr_gen_loss}, inst_loss={curr_inst_loss}, time={time.time() - start} sec"
+                #     )
+                #     return
 
-            # Update learning rate based on the loss
-            self.update_learning_rate(curr_gen_loss, previous_loss)
-            previous_loss = curr_gen_loss
+                # Update learning rate based on the loss
+                self.update_learning_rate(curr_gen_loss, previous_loss)
+                previous_loss = curr_gen_loss
 
-            print(
-                f"> running: current sample {i + 1}, gen_loss={curr_gen_loss}, inst_loss={curr_inst_loss}, time={time.time() - start} sec"
-            )
+                print(
+                    f"> running: epoch {epoch + 1}/{epochs}, batch {i//batch_size + 1}, gen_loss={curr_gen_loss:.4f}, inst_loss={curr_inst_loss:.4f}, time={time.time() - start:.2f} sec"
+                )
+            
+            # Print epoch summary
+            avg_gen_loss = epoch_gen_loss / n_batches if n_batches > 0 else 0
+            avg_inst_loss = epoch_inst_loss / n_batches if n_batches > 0 else 0
+            print(f"Epoch {epoch + 1} completed - Avg Gen Loss: {avg_gen_loss:.4f}, Avg Inst Loss: {avg_inst_loss:.4f}")
 
     def __read_me__(self):
         """

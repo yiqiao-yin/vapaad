@@ -102,14 +102,18 @@ class VAPAADTester:
     model training, evaluation, and result visualization.
     """
     
-    def __init__(self, output_dir: str = "test_results") -> None:
+    def __init__(self, output_dir: str = "test_results", num_samples: int = 64, epochs: int = 1) -> None:
         """
         Initialize the VAPAAD tester.
         
         Args:
             output_dir: Directory to save test results and outputs
+            num_samples: Number of training samples to use
+            epochs: Number of epochs to train
         """
         self.output_dir = output_dir
+        self.num_samples = num_samples
+        self.epochs = epochs
         self.results: Dict[str, Any] = {}
         self.model: Optional[Any] = None
         self.x_train: Optional[np.ndarray] = None
@@ -293,19 +297,18 @@ class VAPAADTester:
         
         print("VAPAAD model initialized successfully")
     
-    def train_model(self, num_samples: int = 64, batch_size: int = 3) -> None:
+    def train_model(self, batch_size: int = 3) -> None:
         """
         Train the VAPAAD model on a subset of data.
         
         Args:
-            num_samples: Number of samples to use for training
             batch_size: Batch size for training
         """
-        print(f"Training model with {num_samples} samples, batch size {batch_size}...")
+        print(f"Training model with {self.num_samples} samples, {self.epochs} epochs, batch size {batch_size}...")
         start_time = time.time()
         
         # Select random subset
-        indices = np.random.choice(self.x_train.shape[0], num_samples, replace=True)
+        indices = np.random.choice(self.x_train.shape[0], self.num_samples, replace=True)
         x_train_sub = self.x_train[indices]
         y_train_sub = self.y_train[indices]
         
@@ -321,7 +324,7 @@ class VAPAADTester:
                 print(f"📊 GPU detected: {tf.test.gpu_device_name()}")
             
             with tf.device(device_context):
-                self.model.train(x_train_sub, y_train_sub, batch_size=batch_size)
+                self.model.train(x_train_sub, y_train_sub, batch_size=batch_size, epochs=self.epochs)
                 
         except Exception as device_error:
             if gpu_used:
@@ -329,7 +332,7 @@ class VAPAADTester:
                 print("🔄 Falling back to CPU training...")
                 gpu_used = False
                 with tf.device('/device:CPU:0'):
-                    self.model.train(x_train_sub, y_train_sub, batch_size=batch_size)
+                    self.model.train(x_train_sub, y_train_sub, batch_size=batch_size, epochs=self.epochs)
             else:
                 print(f"❌ Training failed: {device_error}")
                 raise
@@ -337,7 +340,8 @@ class VAPAADTester:
         training_time = time.time() - start_time
         
         self.results['training'] = {
-            'num_samples': num_samples,
+            'num_samples': self.num_samples,
+            'epochs': self.epochs,
             'batch_size': batch_size,
             'training_time': training_time,
             'device_preference': self.device_preference,
@@ -556,7 +560,7 @@ class VAPAADTester:
             self.acquire_data()
             self.visualize_sample_data()
             self.initialize_model()
-            self.train_model(num_samples=64, batch_size=3)
+            self.train_model(batch_size=3)
             self.evaluate_model()
             self.create_prediction_visualization()
             self.create_prediction_gifs()
@@ -604,6 +608,12 @@ def main():
         default="test_results",
         help="Output directory for results (default: test_results)"
     )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=1,
+        help="Number of epochs to train (default: 1)"
+    )
     args = parser.parse_args()
     
     print("VAPAAD Model Test Suite")
@@ -618,6 +628,7 @@ def main():
     print()
     print(f"🔢 Training Configuration:")
     print(f"   • Number of samples: {args.num_samples}")
+    print(f"   • Number of epochs: {args.epochs}")
     print(f"   • Output directory: {args.output_dir}")
     print()
     print("💡 To change device preference, set VAPAAD_DEVICE environment variable:")
@@ -627,7 +638,7 @@ def main():
     print("=" * 50)
     
     # Create tester instance with parsed arguments
-    tester = VAPAADTester(num_samples=args.num_samples, output_dir=args.output_dir)
+    tester = VAPAADTester(num_samples=args.num_samples, epochs=args.epochs, output_dir=args.output_dir)
     
     # Run full test suite
     tester.run_full_test()
