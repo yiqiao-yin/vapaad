@@ -46,17 +46,8 @@ cd my_vapaad_proj
 ### Step 2: Add required packages
 
 ```bash
-# Core dependencies
-uv add numpy
-uv add tensorflow
-uv add keras
-uv add matplotlib
-
-# Additional packages for testing and visualization
-uv add imageio
-uv add ipython
-uv add jupyter
-uv add ipywidgets
+# Add all dependencies in one command
+uv add numpy tensorflow keras matplotlib imageio ipython jupyter ipywidgets
 ```
 
 ### Step 3: Clone and setup VAPAAD
