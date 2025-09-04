@@ -6,6 +6,23 @@ This repository accompanies the paper "Vision Augmentation Prediction Autoencode
 
 VAPAAD is a sophisticated neural network architecture designed for video processing tasks such as video frame prediction and unsupervised learning. The model leverages a dual-encoder structure and integrates data augmentation directly into the video processing pipeline. It uses self-attention mechanisms to capture long-range dependencies within video sequences, enhancing its predictive capabilities.
 
+## 🚀 Quick Start
+
+```bash
+# 1. Initialize project and add dependencies
+uv init my_vapaad_proj && cd my_vapaad_proj
+uv add numpy tensorflow keras matplotlib imageio ipython jupyter ipywidgets
+
+# 2. Clone and run VAPAAD
+git clone https://github.com/yiqiao-yin/vapaad.git
+cd vapaad/test
+uv run python test_vapaad.py
+
+# 3. Check results in test_results/ directory
+```
+
+**That's it!** The script will download data, train the model, and generate visualizations automatically.
+
 ## 📁 Repository Structure
 
 ```
@@ -148,11 +165,45 @@ test_results/
     |___...
 ```
 
+## ⚙️ Device Configuration & Performance
+
+VAPAAD supports flexible CPU/GPU execution with intelligent device selection:
+
+### **Device Options**
+| Setting | Behavior | Best For |
+|---------|----------|----------|
+| `cpu` (default) | Force CPU-only execution | Maximum compatibility, any system |
+| `gpu` | Prefer GPU, fallback to CPU | Systems with proper CUDA/cuDNN setup |
+| `auto` | Auto-detect best device | Let TensorFlow choose optimally |
+
+### **Performance Comparison**
+- **CPU Mode**: Universal compatibility, slower training (~10-15 min)
+- **GPU Mode**: 5-10x faster training (~2-3 min), requires GPU setup
+- **Memory Usage**: ~4-6GB RAM (CPU) or ~2-4GB VRAM (GPU)
+
+### **GPU Setup Requirements**
+For `VAPAAD_DEVICE=gpu` mode, ensure you have:
+```bash
+# Install GPU-enabled TensorFlow
+uv add tensorflow[gpu]  # or tensorflow-gpu
+
+# System requirements:
+# - NVIDIA GPU with CUDA support
+# - CUDA Toolkit (compatible version)
+# - cuDNN library properly installed
+```
+
+### **Troubleshooting**
+- **"No DNN in stream executor"**: Use `VAPAAD_DEVICE=cpu` mode
+- **Out of memory errors**: Reduce batch size or use CPU mode
+- **Slow training**: Consider GPU mode if hardware supports it
+
 ## 🔧 Development & Testing
 
 The project includes comprehensive testing infrastructure:
 
 - **Pylint compliance**: Code follows PEP 8 standards with type hints
+- **Device flexibility**: CPU/GPU execution with automatic fallback
 - **Automated testing**: Complete pipeline testing with `test_vapaad.py`
 - **JSON logging**: Structured result saving for analysis
 - **Visualization**: Automated plot and GIF generation
