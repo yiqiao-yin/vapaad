@@ -9,6 +9,7 @@ model training, prediction, visualization, and GIF generation.
 Copyright © 2010-2024 Present Yiqiao Yin
 """
 
+import argparse
 import json
 import os
 import sys
@@ -589,15 +590,35 @@ def main():
     """
     Main function to run VAPAAD tests.
     """
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="VAPAAD Model Test Suite")
+    parser.add_argument(
+        "--num_samples", 
+        type=int, 
+        default=64,
+        help="Number of training samples to use (default: 64)"
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="test_results",
+        help="Output directory for results (default: test_results)"
+    )
+    args = parser.parse_args()
+    
     print("VAPAAD Model Test Suite")
     print("=" * 50)
     
-    # Display device configuration info
+    # Display configuration info
     print(f"📱 Device Configuration:")
     print(f"   • Current preference: {DEVICE_PREFERENCE}")
     print(f"   • GPU available: {'Yes' if tf.test.gpu_device_name() else 'No'}")
     if tf.test.gpu_device_name():
         print(f"   • GPU device: {tf.test.gpu_device_name()}")
+    print()
+    print(f"🔢 Training Configuration:")
+    print(f"   • Number of samples: {args.num_samples}")
+    print(f"   • Output directory: {args.output_dir}")
     print()
     print("💡 To change device preference, set VAPAAD_DEVICE environment variable:")
     print("   • VAPAAD_DEVICE=cpu    - Force CPU-only execution")
@@ -605,8 +626,8 @@ def main():
     print("   • VAPAAD_DEVICE=auto   - Auto-detect best device")
     print("=" * 50)
     
-    # Create tester instance
-    tester = VAPAADTester(output_dir="test_results")
+    # Create tester instance with parsed arguments
+    tester = VAPAADTester(num_samples=args.num_samples, output_dir=args.output_dir)
     
     # Run full test suite
     tester.run_full_test()
