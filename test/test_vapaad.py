@@ -33,8 +33,27 @@ except ImportError:
 # Use non-interactive backend for matplotlib in testing environments
 matplotlib.use('Agg')
 
-# Configure TensorFlow for CPU-only execution to avoid GPU compatibility issues
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Force CPU-only execution
+# Configure TensorFlow execution mode
+# Users can set VAPAAD_DEVICE environment variable: 'cpu', 'gpu', or 'auto' (default)
+DEVICE_PREFERENCE = os.environ.get('VAPAAD_DEVICE', 'cpu').lower()
+
+if DEVICE_PREFERENCE == 'cpu':
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Force CPU-only execution
+    print("🖥️  Device preference: CPU-only (set VAPAAD_DEVICE=gpu or VAPAAD_DEVICE=auto to change)")
+elif DEVICE_PREFERENCE == 'gpu':
+    # Allow GPU usage, remove CPU-only restriction
+    if 'CUDA_VISIBLE_DEVICES' in os.environ and os.environ['CUDA_VISIBLE_DEVICES'] == '-1':
+        del os.environ['CUDA_VISIBLE_DEVICES']
+    print("🚀 Device preference: GPU-preferred (will fallback to CPU if GPU unavailable)")
+elif DEVICE_PREFERENCE == 'auto':
+    # Let TensorFlow decide automatically
+    if 'CUDA_VISIBLE_DEVICES' in os.environ and os.environ['CUDA_VISIBLE_DEVICES'] == '-1':
+        del os.environ['CUDA_VISIBLE_DEVICES']
+    print("⚡ Device preference: Auto-detect (TensorFlow will choose best available)")
+else:
+    print(f"⚠️  Unknown VAPAAD_DEVICE value: {DEVICE_PREFERENCE}. Using CPU-only as fallback.")
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'   # Reduce TF logging
 
 # Add parent directory to path to import from src
@@ -68,12 +87,42 @@ class VAPAADTester:
         self.train_dataset: Optional[np.ndarray] = None
         self.val_dataset: Optional[np.ndarray] = None
         
+        # Store device preference
+        self.device_preference = DEVICE_PREFERENCE
+        
         # Create output directory
         os.makedirs(output_dir, exist_ok=True)
         
         # Set random seeds for reproducibility
         np.random.seed(42)
         tf.random.set_seed(42)
+    
+    def _get_device_context(self) -> str:
+        """
+        Determine the appropriate device context based on user preference and availability.
+        
+        Returns:
+            Device string for tf.device() context
+        """
+        if self.device_preference == 'cpu':
+            return '/device:CPU:0'
+        elif self.device_preference == 'gpu':
+            if tf.test.gpu_device_name():
+                return '/device:GPU:0'
+            else:
+                print("⚠️  GPU requested but not available. Falling back to CPU.")
+                return '/device:CPU:0'
+        elif self.device_preference == 'auto':
+            # Let TensorFlow choose, but provide context for logging
+            return '/device:GPU:0' if tf.test.gpu_device_name() else '/device:CPU:0'
+        else:
+            return '/device:CPU:0'
+    
+    def _should_use_gpu(self) -> bool:
+        """Check if GPU should be used based on preference and availability."""
+        if self.device_preference == 'cpu':
+            return False
+        return tf.test.gpu_device_name() != ''
     
     def acquire_data(self) -> None:
         """
@@ -229,25 +278,28 @@ class VAPAADTester:
         
         print(f"Training subset shape: {x_train_sub.shape}, {y_train_sub.shape}")
         
-        # Train model with GPU support if available, fallback to CPU on errors
-        gpu_used = False
+        # Train model with user-specified device preference
+        device_context = self._get_device_context()
+        gpu_used = self._should_use_gpu() and 'GPU' in device_context
+        
         try:
-            if tf.test.gpu_device_name() != '':
-                print(f"Attempting training on GPU: {tf.test.gpu_device_name()}")
-                # Force CPU execution to avoid cuDNN issues
+            print(f"🔥 Training on device: {device_context}")
+            if gpu_used:
+                print(f"📊 GPU detected: {tf.test.gpu_device_name()}")
+            
+            with tf.device(device_context):
+                self.model.train(x_train_sub, y_train_sub, batch_size=batch_size)
+                
+        except Exception as device_error:
+            if gpu_used:
+                print(f"⚠️  GPU training failed: {device_error}")
+                print("🔄 Falling back to CPU training...")
+                gpu_used = False
                 with tf.device('/device:CPU:0'):
-                    print("Note: Using CPU execution to avoid GPU compatibility issues")
                     self.model.train(x_train_sub, y_train_sub, batch_size=batch_size)
-                gpu_used = False  # Actually using CPU due to compatibility
             else:
-                print("Training on CPU")
-                self.model.train(x_train_sub, y_train_sub, batch_size=batch_size)
-        except Exception as gpu_error:
-            print(f"GPU training failed: {gpu_error}")
-            print("Falling back to CPU training...")
-            with tf.device('/device:CPU:0'):
-                self.model.train(x_train_sub, y_train_sub, batch_size=batch_size)
-            gpu_used = False
+                print(f"❌ Training failed: {device_error}")
+                raise
         
         training_time = time.time() - start_time
         
@@ -255,6 +307,8 @@ class VAPAADTester:
             'num_samples': num_samples,
             'batch_size': batch_size,
             'training_time': training_time,
+            'device_preference': self.device_preference,
+            'device_used': device_context,
             'gpu_used': gpu_used,
             'gpu_available': tf.test.gpu_device_name() != '',
             'selected_indices': indices[:6].tolist()
@@ -272,10 +326,22 @@ class VAPAADTester:
         # Get trained generator
         trained_generator = self.model.gen_main
         
-        # Make predictions on validation set (force CPU to avoid compatibility issues)
-        with tf.device('/device:CPU:0'):
-            print("Running predictions on CPU to avoid GPU compatibility issues")
-            y_val_pred = trained_generator.predict(self.x_val)
+        # Make predictions on validation set with user-specified device preference
+        device_context = self._get_device_context()
+        
+        try:
+            print(f"🔮 Running predictions on device: {device_context}")
+            with tf.device(device_context):
+                y_val_pred = trained_generator.predict(self.x_val)
+        except Exception as device_error:
+            if 'GPU' in device_context:
+                print(f"⚠️  GPU prediction failed: {device_error}")
+                print("🔄 Falling back to CPU for predictions...")
+                with tf.device('/device:CPU:0'):
+                    y_val_pred = trained_generator.predict(self.x_val)
+            else:
+                print(f"❌ Prediction failed: {device_error}")
+                raise
         
         evaluation_time = time.time() - start_time
         
@@ -479,13 +545,26 @@ def main():
     print("VAPAAD Model Test Suite")
     print("=" * 50)
     
+    # Display device configuration info
+    print(f"📱 Device Configuration:")
+    print(f"   • Current preference: {DEVICE_PREFERENCE}")
+    print(f"   • GPU available: {'Yes' if tf.test.gpu_device_name() else 'No'}")
+    if tf.test.gpu_device_name():
+        print(f"   • GPU device: {tf.test.gpu_device_name()}")
+    print()
+    print("💡 To change device preference, set VAPAAD_DEVICE environment variable:")
+    print("   • VAPAAD_DEVICE=cpu    - Force CPU-only execution")
+    print("   • VAPAAD_DEVICE=gpu    - Prefer GPU, fallback to CPU")
+    print("   • VAPAAD_DEVICE=auto   - Auto-detect best device")
+    print("=" * 50)
+    
     # Create tester instance
     tester = VAPAADTester(output_dir="test_results")
     
     # Run full test suite
     tester.run_full_test()
     
-    print("\nTest suite completed. Check test_results/ directory for outputs.")
+    print("\n✅ Test suite completed. Check test_results/ directory for outputs.")
 
 
 if __name__ == "__main__":

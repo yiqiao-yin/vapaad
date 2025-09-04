@@ -78,13 +78,23 @@ pip install -r requirements.txt
 # Navigate to test directory
 cd test
 
-# Run the complete VAPAAD pipeline
-python test_vapaad.py
+# Run the complete VAPAAD pipeline (CPU-only by default)
+uv run python test_vapaad.py
+
+# Or specify device preference:
+VAPAAD_DEVICE=cpu uv run python test_vapaad.py     # Force CPU-only
+VAPAAD_DEVICE=gpu uv run python test_vapaad.py     # Prefer GPU, fallback to CPU
+VAPAAD_DEVICE=auto uv run python test_vapaad.py    # Auto-detect best device
 ```
+
+**Device Options:**
+- `cpu` (default): Force CPU-only execution for maximum compatibility
+- `gpu`: Prefer GPU with automatic CPU fallback if GPU fails
+- `auto`: Let TensorFlow automatically choose the best available device
 
 This will automatically:
 - Download the Moving MNIST dataset
-- Train the VAPAAD model
+- Train the VAPAAD model on your chosen device
 - Generate predictions and visualizations  
 - Create GIF animations
 - Save all results to `test_results/` directory
