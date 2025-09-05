@@ -98,16 +98,31 @@ cd test
 # Run the complete VAPAAD pipeline (CPU-only by default)
 uv run python test_vapaad.py
 
-# Or specify device preference:
-VAPAAD_DEVICE=cpu uv run python test_vapaad.py     # Force CPU-only
+# Or specify device preference and training parameters:
+VAPAAD_DEVICE=cpu uv run python test_vapaad.py     # Force CPU-only (default)
 VAPAAD_DEVICE=gpu uv run python test_vapaad.py     # Prefer GPU, fallback to CPU
 VAPAAD_DEVICE=auto uv run python test_vapaad.py    # Auto-detect best device
+
+# Advanced usage with command line arguments:
+# GPU with 10 epochs, 500 samples
+VAPAAD_DEVICE=gpu uv run python test_vapaad.py --epochs 10 --num_samples 500
+
+# CPU-only with 3 epochs, 200 samples
+VAPAAD_DEVICE=cpu uv run python test_vapaad.py --epochs 3 --num_samples 200
+
+# Auto-detect device, 5 epochs, 1000 samples, custom output directory
+VAPAAD_DEVICE=auto uv run python test_vapaad.py --epochs 5 --num_samples 1000 --output_dir my_results
 ```
 
 **Device Options:**
 - `cpu` (default): Force CPU-only execution for maximum compatibility
 - `gpu`: Prefer GPU with automatic CPU fallback if GPU fails
 - `auto`: Let TensorFlow automatically choose the best available device
+
+**Command Line Arguments:**
+- `--epochs N`: Number of training epochs (default: 1)
+- `--num_samples N`: Number of training samples to use (default: 64)  
+- `--output_dir DIR`: Output directory for results (default: test_results)
 
 This will automatically:
 - Download the Moving MNIST dataset
