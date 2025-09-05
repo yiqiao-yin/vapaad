@@ -8,6 +8,38 @@ from tensorflow import keras
 from tensorflow.keras import layers
 
 
+def sequence_ce_sum(y_true, y_pred):
+    """Paper-style summed cross-entropy per sequence."""
+    # Always cast to float32 to avoid mixed precision issues
+    y_true = tf.cast(y_true, tf.float32)
+    y_pred = tf.cast(y_pred, tf.float32)
+    
+    bce = tf.keras.losses.binary_crossentropy(y_true, y_pred)
+    # Get the actual number of dimensions to handle both 4D and 5D cases
+    ndims = len(bce.shape)
+    if ndims == 4:  # (batch, time, height, width)
+        ce_sum_per_seq = tf.reduce_sum(bce, axis=[1, 2, 3])
+    else:  # (batch, time, height, width, channels)
+        ce_sum_per_seq = tf.reduce_sum(bce, axis=[1, 2, 3, 4])
+    return tf.reduce_mean(ce_sum_per_seq)
+
+
+def mse_seq(y_true, y_pred):
+    """MSE per sequence."""
+    # Always cast to float32 to avoid mixed precision issues
+    y_true = tf.cast(y_true, tf.float32)
+    y_pred = tf.cast(y_pred, tf.float32)
+    
+    se = tf.square(y_pred - y_true)
+    # Get the actual number of dimensions
+    ndims = len(se.shape)
+    if ndims == 4:  # (batch, time, height, width)
+        mse_per_seq = tf.reduce_mean(se, axis=[1, 2, 3])
+    else:  # (batch, time, height, width, channels)
+        mse_per_seq = tf.reduce_mean(se, axis=[1, 2, 3, 4])
+    return tf.reduce_mean(mse_per_seq)
+
+
 class SelfAttention(layers.Layer):
     """
     A custom self-attention layer that computes attention scores to enhance model performance by focusing on relevant parts of the input data.
@@ -230,7 +262,7 @@ class VAPAAD:
 
     def train_step(
         self, images: tf.Tensor, future_images: tf.Tensor
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
+    ) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:
         """
         Perform a single training step by updating the generator and instructor models.
 
@@ -244,8 +276,9 @@ class VAPAAD:
                                     to the generator model 'gen_aux'.
 
         Returns:
-            Tuple[tf.Tensor, tf.Tensor]: A tuple containing the loss values for the generator model
-                                        ('gen_loss') and the instructor model ('inst_loss').
+            Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]: A tuple containing the loss values for 
+                                        the generator model ('gen_loss'), instructor model ('inst_loss'),
+                                        custom sequence cross-entropy sum ('seq_ce'), and MSE per sequence ('mse_seq').
 
         Note: 'gen_optimizer' and 'inst_optimizer' should be attributes of the class instance.
 
@@ -278,7 +311,11 @@ class VAPAAD:
             zip(gradients_of_inst, self.instructor.trainable_variables)
         )
 
-        return gen_loss, inst_loss
+        # Calculate custom metrics for monitoring
+        seq_ce = sequence_ce_sum(future_images, output_main)
+        mse_seq_val = mse_seq(future_images, output_main)
+
+        return gen_loss, inst_loss, seq_ce, mse_seq_val
 
     def generator_loss(self, fake_output):
         """
@@ -350,7 +387,7 @@ class VAPAAD:
                 selected_indices = indices[i : i + batch_size]
                 x_batch = x_train[selected_indices]
                 y_batch = y_train[selected_indices]
-                curr_gen_loss, curr_inst_loss = self.train_step(x_batch, y_batch)
+                curr_gen_loss, curr_inst_loss, curr_seq_ce, curr_mse_seq = self.train_step(x_batch, y_batch)
                 
                 # Accumulate losses for epoch summary
                 epoch_gen_loss += float(curr_gen_loss)
@@ -368,7 +405,7 @@ class VAPAAD:
                 previous_loss = curr_gen_loss
 
                 print(
-                    f"> running: epoch {epoch + 1}/{epochs}, batch {i//batch_size + 1}, gen_loss={curr_gen_loss:.4f}, inst_loss={curr_inst_loss:.4f}, time={time.time() - start:.2f} sec"
+                    f"> running: epoch {epoch + 1}/{epochs}, batch {i//batch_size + 1}, gen_loss={curr_gen_loss:.4f}, inst_loss={curr_inst_loss:.4f}, seq_ce={curr_seq_ce:.4f}, mse_seq={curr_mse_seq:.4f}, time={time.time() - start:.2f} sec"
                 )
             
             # Print epoch summary

@@ -64,37 +64,6 @@ from src.plot_images import plot_image_sequences, rescale_and_discretize
 from src.vapaad import VAPAAD
 
 
-def sequence_ce_sum(y_true, y_pred):
-    """Paper-style summed cross-entropy per sequence."""
-    # Always cast to float32 to avoid mixed precision issues
-    y_true = tf.cast(y_true, tf.float32)
-    y_pred = tf.cast(y_pred, tf.float32)
-    
-    bce = tf.keras.losses.binary_crossentropy(y_true, y_pred)
-    # Get the actual number of dimensions to handle both 4D and 5D cases
-    ndims = len(bce.shape)
-    if ndims == 4:  # (batch, time, height, width)
-        ce_sum_per_seq = tf.reduce_sum(bce, axis=[1, 2, 3])
-    else:  # (batch, time, height, width, channels)
-        ce_sum_per_seq = tf.reduce_sum(bce, axis=[1, 2, 3, 4])
-    return tf.reduce_mean(ce_sum_per_seq)
-
-
-def mse_seq(y_true, y_pred):
-    """MSE per sequence."""
-    # Always cast to float32 to avoid mixed precision issues
-    y_true = tf.cast(y_true, tf.float32)
-    y_pred = tf.cast(y_pred, tf.float32)
-    
-    se = tf.square(y_pred - y_true)
-    # Get the actual number of dimensions
-    ndims = len(se.shape)
-    if ndims == 4:  # (batch, time, height, width)
-        mse_per_seq = tf.reduce_mean(se, axis=[1, 2, 3])
-    else:  # (batch, time, height, width, channels)
-        mse_per_seq = tf.reduce_mean(se, axis=[1, 2, 3, 4])
-    return tf.reduce_mean(mse_per_seq)
-
 
 class VAPAADTester:
     """
@@ -386,8 +355,11 @@ class VAPAADTester:
         mse = np.mean((self.y_val - y_val_pred) ** 2)
         mae = np.mean(np.abs(self.y_val - y_val_pred))
         
-        # Calculate custom loss functions
+        # Calculate custom loss functions using functions from src
         print("📊 Computing custom loss metrics...")
+        # Import custom functions from the VAPAAD module
+        from src.vapaad import sequence_ce_sum, mse_seq
+        
         with tf.device(device_context):
             custom_ce_sum = sequence_ce_sum(self.y_val, y_val_pred).numpy()
             custom_mse_seq = mse_seq(self.y_val, y_val_pred).numpy()
