@@ -293,9 +293,9 @@ class VAPAAD:
             real_output = self.instructor(output_aux, training=True)
             fake_output = self.instructor(output_main, training=True)
 
-            # Calculate losses for both models
-            gen_loss = self.generator_loss(fake_output)
-            inst_loss = self.instructor_loss(real_output, fake_output)
+            # Calculate losses for both models with custom metrics
+            gen_loss = self.generator_loss(fake_output, output_main, future_images)
+            inst_loss = self.instructor_loss(real_output, fake_output, future_images, output_main)
 
         # Apply gradients to update model weights
         gradients_of_gen = gen_tape.gradient(
@@ -317,40 +317,62 @@ class VAPAAD:
 
         return gen_loss, inst_loss, seq_ce, mse_seq_val
 
-    def generator_loss(self, fake_output):
+    def generator_loss(self, fake_output, generated_images, target_images):
         """
-        Calculates the loss for the generator model based on its output for generated (fake) images.
+        Calculates the combined loss for the generator model including custom metrics.
 
-        The loss encourages the generator to produce images that the instructor model classifies as real.
-        This is achieved by comparing the generator's output for fake images against a target tensor of ones,
-        indicating that the ideal output of the generator would be classified as real by the instructor model.
+        The loss encourages the generator to produce images that the instructor model classifies as real,
+        while also optimizing for custom sequence-based metrics.
 
         Args:
         fake_output (tf.Tensor): The generator model's output logits for generated (fake) images.
+        generated_images (tf.Tensor): The actual generated images from gen_main.
+        target_images (tf.Tensor): The target images for comparison.
 
         Returns:
-        tf.Tensor: The loss for the generator model, encouraging it to generate more realistic images.
+        tf.Tensor: The combined loss for the generator model.
         """
-        return self.cross_entropy(tf.ones_like(fake_output), fake_output)
+        # Original generator loss
+        adversarial_loss = self.cross_entropy(tf.ones_like(fake_output), fake_output)
+        
+        # Custom metrics
+        seq_ce_loss = sequence_ce_sum(target_images, generated_images)
+        mse_seq_loss = mse_seq(target_images, generated_images)
+        
+        # Combined loss with scaling
+        combined_loss = adversarial_loss + 0.001 * seq_ce_loss + 1.0 * mse_seq_loss
+        
+        return combined_loss
 
-    def instructor_loss(self, real_output, fake_output):
+    def instructor_loss(self, real_output, fake_output, real_images, generated_images):
         """
-        Calculates the loss for the instructor model based on its output for real and generated (fake) images.
+        Calculates the combined loss for the instructor model including custom metrics.
 
-        The loss is computed as the sum of the cross-entropy losses for the real and fake outputs. For real images,
-        the target is a tensor of ones, and for fake images, the target is a tensor of zeros.
+        The loss is computed as the sum of the cross-entropy losses for the real and fake outputs,
+        plus custom sequence-based metrics to improve discrimination quality.
 
         Args:
         real_output (tf.Tensor): The instructor model's output logits for real images.
         fake_output (tf.Tensor): The instructor model's output logits for generated (fake) images.
+        real_images (tf.Tensor): The actual real/target images.
+        generated_images (tf.Tensor): The generated images from gen_main.
 
         Returns:
-        tf.Tensor: The total loss for the instructor model, combining the real and fake loss components.
+        tf.Tensor: The combined loss for the instructor model.
         """
-        # Define real_loss and fake_loss
+        # Original instructor loss
         real_loss = self.cross_entropy(tf.zeros_like(real_output), real_output)
         fake_loss = self.cross_entropy(tf.ones_like(fake_output), fake_output)
-        return real_loss + fake_loss
+        adversarial_loss = real_loss + fake_loss
+        
+        # Custom metrics to improve discrimination
+        seq_ce_loss = sequence_ce_sum(real_images, generated_images)
+        mse_seq_loss = mse_seq(real_images, generated_images)
+        
+        # Combined loss with scaling
+        combined_loss = adversarial_loss + 0.001 * seq_ce_loss + 1.0 * mse_seq_loss
+        
+        return combined_loss
 
     def train(self, x_train, y_train, batch_size=64, epochs=1):
         """
